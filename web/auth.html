@@ -1,0 +1,144 @@
+
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <title>Photos for TV Authentication</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+        <style>
+            body, html, main, .container {
+                height: 100%;
+            }
+        </style>
+
+    </head>
+
+    <body class='h-100'>
+        <main class="content-wrap bg-light text-dark h-100">   
+
+            <div class="container text-center">
+               
+                    <div class="row m-t-2">
+
+                        <div class="col col-12 col-md-8 col-lg-4 offset-md-2 offset-lg-4">
+                            <h1>We need you to authenticate </h1>
+                            <h5>Please enter authentication code below to control your slideshow.</h5> 
+
+                                <p>
+                                    <div class="input-group has-validation">
+
+                                        <input type="text" class="form-control text-center" 
+                                            id="code" placeholder="Enter Passcode" aria-describedby="inputGroupPrepend3 codeFeedback" required />
+
+                                        <div id="codeFeedback" class="invalid-feedback">
+                                                Please enter the correct Passcode.
+                                        </div>
+
+                                    </div>
+
+                                </p>
+
+
+                                <p>
+                                    <div> 
+                                        <select class="form-select form-select-lg mb-3" 
+                                        aria-label=".form-select-lg example" id="albums">
+                                        <option selected>Albums</option>
+                                        </select>
+                                    </div>
+                                    
+
+                                </p>
+                        
+                   
+                                <p>
+                                    <div class="text-center">
+                                        <a href="#" onclick="send()" class="btn btn-primary">Submit</a>  
+                                    </div>
+                                </p>
+
+                                    <div class="alert alert-success" role="alert" id="success" 
+                                            style="display:none">
+                                        Successful 
+                                    </div>
+
+ 
+                    </div>
+             </div>
+        
+        </main>
+
+    <script type="text/javascript">
+        var hash = window.location.hash.substr(1);
+        var auth = hash.split('&').reduce(function (res, item) {
+            var parts = item.split('=');
+            res[parts[0]] = parts[1];
+            return res;
+        }, {});
+
+        function getAlbums(endP, albumPage, page) {
+            var params = albumPage != null ? "?pageToken=" + albumPage : "";
+                    fetch('${G_MEDIA_API}/' + endP + params,  {
+                method: 'GET',
+                headers: {
+                        'Content-Type': 'applications/json',
+                        'Authorization': 'Bearer ' + auth.access_token
+                }
+            })
+            .then(res => res.json()) 
+            .then(albums=> {
+                var present = false;
+                if (albums.albums != null) {
+                    for (a of albums.albums){
+                        var present = true;
+                        var list='<option value="'+a.id+'">'+a.title+'</a>';
+                        document.getElementById("albums").innerHTML+=list;
+                    }
+                }
+                if (present && page < 5) {
+                    getAlbums(endP, albums.nextPageToken, page+1);
+                } else {
+                }
+
+            });
+        }
+        document.getElementById("albums").innerHTML="";
+        getAlbums("albums", null, 0);
+        getAlbums("sharedAlbums", null, 0);
+
+          function send() {
+            var code = document.getElementById("code").value; 
+            var select = document.getElementById('albums');
+            var album = select.options[select.selectedIndex].value;
+    
+            var url = "${CODE_URL}";
+            var data = {
+                code: code,
+                access_token: auth.access_token,
+                exp: auth.expires_in,
+                album:album
+            };
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(res => res.json())
+            .then(message => {
+                if (message.message != "OK") {
+                    document.getElementById("code").className+= " is-invalid";
+
+                } 
+                else {
+                    document.getElementById("success").style="";
+                }
+            })
+        }
+    </script>
+    </body>
+</html> 

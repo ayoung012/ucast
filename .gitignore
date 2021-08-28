@@ -1,0 +1,5 @@
+auth/node_modules/
+serverless.env.yml
+venv/
+.serverless/
+

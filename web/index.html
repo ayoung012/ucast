@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang=en>
+    <head>
+        <meta charset=utf-8>
+        <title>Photos for TV</title>
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+		<style>
+html, body, .page-section, .section-background {
+    height: 100%;
+}
+.page-section {
+    position: relative;
+    margin: 0;
+    padding: 0;
+}
+.section-background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+.section-background img {
+    flex-shrink: 0;
+    min-width: 100%;
+    min-height: 100%;
+}
+
+.section-background-portrait { 
+
+    min-width: 100%;
+    position: relative;
+    height: 100%;
+    background: black;
+}
+
+
+.left {
+    
+    position: absolute;
+    width: 49.5%;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden
+
+}
+
+.otherside {
+
+    position: absolute;
+    width: 49.5%;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden
+}
+.section-background-landscape {
+    min-width: 100%;
+    
+}
+
+.container {
+	margin: 15px;
+	width:100%;
+    position: absolute;
+    bottom: 0;
+	right: 0;
+}
+
+.background-color-primary {
+    background-color: #162046;
+}
+.background-color-secondary {
+    background-color: #593085;
+}
+</style>
+    </head>
+    <body>
+<section
+  class='page-section
+    bg-light
+    text-dark'
+  id="auth"
+>
+  <div class="auth-container d-flex w-100 h-100">
+    <div class="row w-100 justify-content-center align-self-center">
+      <div class="col offset-6">
+        <div class="section-content">
+            <h1>We need you to authenticate</h1>
+            <h2>Visit <span class="text-primary">${ENDPOINT}/${AUTH_URI}</span> on another device</h2>
+            <h2>Log into your Google account</h2>
+            <h2>Use code <span id="code" class="text-success"></span></h2>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<section
+  class='page-section
+    has-background
+    text-light'
+  style="display: none"
+  id="slideshow"
+
+>
+  <div class="section-background">
+    <div id="section-portrait" class="section-background-portrait">
+      <div class="left">
+        <img id="portrait" class="img-fluid"
+                           src="" />
+      </div>
+      <div class="otherside">
+        <img id="slide" class="img-fluid"
+                           src=""/>
+      </div>
+    </div>
+    <div id="section-landscape" class="section-background-landscape">
+      <img id="landscape" class="img-fluid"
+                           src="" />
+    </div>
+  </div>
+  <div class="container">
+    <div class="row">
+      <div class="col offset-8 col-3">
+        <div class="section-content text-right">
+            <h1 id="time"></h1>
+          <p id="album" class="album"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<script type="text/javascript">
+    var album;
+    var list;
+    var sync_url="${SYNC_URL}";
+    var token_url="${CHECK_URL}";
+    var url="${G_MEDIA_API}/mediaItems:search";
+    var check_count = 0;
+
+    var sync_code = null;
+    var session_code = null;
+    var mediaItems = [];
+    var pagesize = 100;
+    var maxpage;
+    var index = 0;
+    var skip = false;
+    function time() {
+        var timeNow = new Date().toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
+        document.getElementById("time").innerHTML = timeNow;
+
+        setTimeout(time, 1000);
+    }
+    time();
+
+    function setPhoto(id, src) {
+        const img = document.getElementById(id);
+        const promise = new Promise(resolve=>{img.onload = resolve})
+        img.src = src;
+        return promise;
+    }
+
+    function getMediaItems(page,pagetoken,token){ 
+        return fetch(url, {
+             method: 'POST',
+             headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+             },
+             body: JSON.stringify({
+                 "pageSize": pagesize.toString(),
+                 "albumId": album,
+                 "pageToken": pagetoken
+             })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log(data.mediaItems.length);
+            mediaItems[page] = data.mediaItems;
+                if (page == 0) {
+                document.getElementById("landscape").src = mediaItems[0][Math.floor(Math.random() * (data.mediaItems.length + 1))].baseUrl + "=w1920-h1080";
+                document.getElementById("section-portrait").style = "display:none";
+                document.getElementById("section-landscape").style = "";
+                document.getElementById("auth").style = "display:none";
+                document.getElementById("slideshow").style = "";
+                    }
+            if(page<maxpage) 
+                return getMediaItems(page+1,data.nextPageToken,token);
+        });
+    }
+
+
+    function slideshow() {
+        const randIndex = list[index];
+        const pg = Math.floor(randIndex / pagesize);
+        const pgIndex = randIndex % pagesize;
+        index = (index+1) % list.length;
+
+        const pic=mediaItems[pg][pgIndex];
+        if (pic.mediaMetadata.height > pic.mediaMetadata.width) {
+            if (skip) {
+                skip = false;
+                slideshow();
+                return;
+            }
+
+            for (var i= 1; i < list.length; i++) {
+                index2=(index+i) % list.length;
+                randIndex2=list[index2];
+                pg2=Math.floor(randIndex2 / pagesize);
+                pic2=mediaItems[pg2][randIndex2 % pagesize];
+
+                if (pic2.mediaMetadata.height > pic2.mediaMetadata.width) {
+                    Promise.all([
+                        setPhoto("portrait", pic.baseUrl + "=w1920-h1080"),
+                        setPhoto("slide", pic2.baseUrl + "=w1920-h1080")
+                    ])
+                    .then(res => {
+                        document.getElementById("section-landscape").style = "display:none";
+                        document.getElementById("section-portrait").style = "";
+                    });
+                    skip = true;
+                    setTimeout(slideshow, 10000);
+                    return;
+                }
+            }
+        }
+        setPhoto("landscape", pic.baseUrl + "=w1920-h1080")
+        .then(res => {
+            document.getElementById("section-portrait").style = "display:none";
+            document.getElementById("section-landscape").style = "";
+        });
+        setTimeout(slideshow, 10000);
+    }
+
+    async function fetchSync() {
+        const res = await fetch(sync_url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        const json = await res.json();
+        sync_code = json.c;
+        session_code = json.s;
+        document.getElementById("code").innerHTML = sync_code;
+        setTimeout(poll, 15000);
+    }
+
+    function poll() {
+        if (sync_code == null) {
+            fetchSync();
+            return;
+        }
+        fetch(token_url + '?c=' + sync_code + '&s='+ encodeURIComponent(session_code), {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+        .then(res => res.json())
+        .then(tok => {
+            if (tok.result != "OK") {
+                throw new Error();
+            }
+            album = tok.album;
+            return fetch('https://photoslibrary.googleapis.com/v1/albums/' + tok.album, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + tok.access_token
+              }
+            })
+            .then(response => response.json())
+            .then(data => {
+                const albumItems = parseInt(data.mediaItemsCount);
+                document.getElementById("album").innerHTML = data.title;
+                maxpage = Math.ceil(albumItems/pagesize)-1;
+                console.log(albumItems);
+                console.log(pagesize);
+                console.log(maxpage);
+                console.log(data.mediaItemsCount);
+                list=[];
+                for (var i=0;i<albumItems;i++){
+                    list[i] = i;
+                }
+                for (let i = list.length - 1; i > 0; i--) {
+                    let j = Math.floor(Math.random() * (i + 1));
+                    [list[i], list[j]] = [list[j], list[i]];
+                }
+                return getMediaItems(0,null,tok.access_token);
+            });
+        })
+        .then(() => {
+            console.log(mediaItems.length);    
+            document.getElementById("auth").style = "display:none";
+            document.getElementById("slideshow").style = "";
+            slideshow();
+            console.log('Success');
+        })
+        .catch(err => {
+            console.log(err);
+            if (check_count < 10) {
+                check_count++;
+                setTimeout(poll, 5000);
+            }
+        });
+    }
+    poll();
+</script>
+    </body>
+</html>

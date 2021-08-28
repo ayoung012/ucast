@@ -1,0 +1,17 @@
+{
+  "name": "galbum-streamer",
+  "version": "1.0.0",
+  "description": "Lambda for galbum streamer server",
+  "main": "handler.js",
+  "devDependencies": {
+    "jest": "^27.0.6",
+    "jest-dynalite": "^3.4.1",
+    "serverless": "^2.55.0"
+  },
+  "scripts": {
+    "test": "jest"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.27.0"
+  }
+}

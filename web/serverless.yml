@@ -1,0 +1,111 @@
+# galbum AWS architecture
+#
+
+service: gphoto-slideshow-web
+
+projectDir: ../
+
+# frameworkVersion: "=X.X.X"
+variablesResolutionMode: 20210326
+
+custom: ${file(../serverless.env.yml):web.${sls:stage}}
+
+provider:
+  name: aws
+  profile: fiks
+  runtime: nodejs14.x
+  stackName: ${file(../serverless.env.yml):regionPrefix}-${sls:stage}-${self:service}
+  environment:
+    ENDPOINT: ${self:custom.endpoint}
+    AUTH_URI: ucast
+    SYNC_URL: ${self:custom.api}/${sls:stage}/sync
+    CODE_URL: ${self:custom.api}/${sls:stage}/code
+    CHECK_URL: ${self:custom.api}/${sls:stage}/check
+    G_AUTH_URI: o/oauth2/v2/auth
+    G_CLIENT_ID: ${self:custom.gClientId}
+    G_AUTH_CALLBACK: https://${self:custom.endpoint}/auth.html
+    G_SCOPE: https://www.googleapis.com/auth/photoslibrary.readonly
+    G_MEDIA_API: https://photoslibrary.googleapis.com/v1
+
+# overwrite defaults here
+#  stage: dev
+  region: ${file(../serverless.env.yml):region}
+
+resources:
+  Resources:
+    WebBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:provider.environment.ENDPOINT}
+        AccessControl: PublicRead
+        WebsiteConfiguration:
+          IndexDocument: index.html
+          RoutingRules:
+          - RedirectRule:
+              HttpRedirectCode: 302
+              HostName: accounts.google.com
+              Protocol: https
+              ReplaceKeyPrefixWith: ${self:provider.environment.G_AUTH_URI}?client_id=${self:provider.environment.G_CLIENT_ID}&redirect_uri=${self:provider.environment.G_AUTH_CALLBACK}&response_type=token&scope=${self:provider.environment.G_SCOPE}
+            RoutingRuleCondition:
+              HttpErrorCodeReturnedEquals: 404
+              KeyPrefixEquals: ${self:provider.environment.AUTH_URI}
+    ## Specifying the policies to make sure all files inside the Bucket are available to CloudFront
+    WebBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket:
+          Ref: WebBucket
+        PolicyDocument:
+          Statement:
+            - Sid: PublicReadGetObject
+              Effect: Allow
+              Principal: "*"
+              Action:
+              - s3:GetObject
+              Resource: arn:aws:s3:::${self:provider.environment.ENDPOINT}/*
+    ## Specifying the CloudFront Distribution to server your Web Application
+    GAlbumCloudFrontDistribution:
+      Type: AWS::CloudFront::Distribution
+      Properties:
+        DistributionConfig:
+          Aliases:
+            - ${self:provider.environment.ENDPOINT}
+          Origins:
+            - DomainName: ${self:provider.environment.ENDPOINT}.s3-website-${opt:region, self:provider.region}.amazonaws.com
+              ## An identifier for the origin which must be unique within the distribution
+              Id: GAlbum
+              CustomOriginConfig:
+                HTTPPort: 80
+                # HTTPSPort: 443
+                OriginProtocolPolicy: http-only
+          Enabled: 'true'
+          CustomErrorResponses:
+            - ErrorCode: 404
+              ResponseCode: 200
+              ResponsePagePath: /index.html
+          DefaultCacheBehavior:
+            AllowedMethods:
+              - DELETE
+              - GET
+              - HEAD
+              - OPTIONS
+              - PATCH
+              - POST
+              - PUT
+            ## The origin id defined above
+            TargetOriginId: GAlbum
+            ## Defining if and how the QueryString and Cookies are forwarded to the origin which in this case is S3
+            ForwardedValues:
+              QueryString: 'true'
+              Cookies:
+                Forward: none
+            ViewerProtocolPolicy: redirect-to-https
+          ViewerCertificate:
+            AcmCertificateArn: ${self:custom.cert}
+            SslSupportMethod: sni-only
+
+  ## In order to print out the hosted domain via `serverless info` we need to define the DomainName output for CloudFormation
+  Outputs:
+    CloudFrontDistribution:
+      Value:
+        'Fn::GetAtt': [ GAlbumCloudFrontDistribution, DomainName ]

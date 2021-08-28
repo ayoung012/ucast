@@ -1,0 +1,83 @@
+# galbum AWS architecture
+#
+
+service: gphoto-slideshow
+
+projectDir: ../
+
+# frameworkVersion: "=X.X.X"
+variablesResolutionMode: 20210326
+
+package:
+  individually: true
+  excludeDevDependencies: true
+  browser: false
+  patterns:
+    - '!venv/**'
+    - '!tests/**'
+    - '!./**'
+    - 'node_modules/**'
+    - 'src/**'
+
+
+provider:
+  name: aws
+  runtime: nodejs14.x
+  stackName: ${file(../serverless.env.yml):regionPrefix}-${sls:stage}-${self:service}
+  environment:
+    DYNAMODB_REGION: ${opt:region, self:provider.region}
+    DYNAMODB_TABLE: ${self:provider.stackName}-sync-tokens
+    WEB_ENDPOINT: https://${file(../serverless.env.yml):web.${sls:stage}.endpoint}
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.DYNAMODB_TABLE}"
+
+
+# overwrite defaults here
+#  stage: dev
+  region: ${file(../serverless.env.yml):region}
+
+functions:
+  sync:
+    handler: src/handler.endpoint
+    name: ${self:provider.stackName}-sync
+    package:
+      patterns:
+        - 'src/**'
+    events:
+      - http: 
+          path: sync
+          method: post
+          cors:
+            origin: "${self:provider.environment.WEB_ENDPOINT}"
+            headers:
+              - Content-Type
+      - http: 
+          path: code
+          method: post
+          cors:
+            origin: "${self:provider.environment.WEB_ENDPOINT}"
+            headers:
+              - Content-Type
+      - http: 
+          path: check
+          method: get
+          cors:
+            origin: "${self:provider.environment.WEB_ENDPOINT}"
+            headers:
+              - Content-Type
+
+resources:
+  Resources:
+    SyncTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Retain
+      Properties:
+        ${file(./serverless-conf.js):codesTableDef}
